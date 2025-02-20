@@ -6,20 +6,18 @@ import (
 
 func TestFetchSubsidiaries(t *testing.T) {
 	orgName := "DnB Bank ASA"
-	depth := 2
-	minOwnership := 50.0
 
-	corpData, err := FetchSubsidiaries(orgName, depth, minOwnership)
+	results, err := GetSubsidiaries(orgName)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if corpData == nil {
-		t.Fatalf("Expected corporate data, got nil")
+	if results == nil {
+		t.Fatalf("Expected results, got nil")
 	}
 
 	expectedSubsidiary := "DnB Asset Management AS"
-	found := findSubsidiary(corpData.Tree, expectedSubsidiary)
+	found := findSubsidiary(results.Tree, expectedSubsidiary)
 
 	if !found {
 		t.Errorf("Expected to find %s in subsidiaries, but it was not found", expectedSubsidiary)

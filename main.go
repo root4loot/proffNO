@@ -12,62 +12,65 @@ type Subsidiary struct {
 	Name            string       `json:"name"`
 	OwnedPercentage float64      `json:"ownedPercentage"`
 	Sub             []Subsidiary `json:"sub"`
+	Depth           int          `json:"-"`
 }
 
-type Results struct {
+type Result struct {
+	InputQuery    string     `json:"inputQuery"`
 	TargetCompany string     `json:"targetCompany"`
 	Tree          Subsidiary `json:"tree"`
 }
 
-func FetchSubsidiaries(orgName string, depth int, minOwnership float64) (*Results, error) {
-	if depth <= 0 {
-		return nil, nil
-	}
+// OwnershipPercentage returns the ownership percentage of the subsidiary
+func (s *Subsidiary) OwnershipPercentage() float64 {
+	return s.OwnedPercentage
+}
 
+// SubsidiaryName returns the name of the subsidiary
+func (s *Subsidiary) SubsidiaryName() string {
+	return s.Name
+}
+
+func GetSubsidiaries(orgName string) (*Result, error) {
 	orgName = formatCompanyName(orgName)
 	orgNumber, err := retrieveCompanyInfo(orgName)
 	if err != nil {
 		return nil, err
 	}
 
-	resultData, err := retrieveCorporateStructure(orgNumber)
+	result, err := retrieveCorporateStructure(orgNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	filterSubsidiaries(&resultData.Tree, minOwnership, depth, 1)
+	result.InputQuery = orgName
 
-	return &Results{TargetCompany: orgName, Tree: resultData.Tree}, nil
+	// Assign depth levels starting from 0 (root)
+	assignDepth(&result.Tree, 0)
+
+	return &Result{TargetCompany: orgName, Tree: result.Tree}, nil
 }
 
-func retrieveCorporateStructure(orgNumber string) (*Results, error) {
+func assignDepth(sub *Subsidiary, depth int) {
+	sub.Depth = depth
+	for i := range sub.Sub {
+		assignDepth(&sub.Sub[i], depth+1)
+	}
+}
+
+func retrieveCorporateStructure(orgNumber string) (*Result, error) {
 	resp, err := http.Get("https://proff.no/api/company/legal/" + orgNumber + "/corporateStructure")
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var resultData Results
-	if err := json.NewDecoder(resp.Body).Decode(&resultData); err != nil {
+	var Result Result
+	if err := json.NewDecoder(resp.Body).Decode(&Result); err != nil {
 		return nil, err
 	}
 
-	return &resultData, nil
-}
-
-func filterSubsidiaries(parent *Subsidiary, minOwnership float64, maxDepth, currentDepth int) {
-	if currentDepth >= maxDepth {
-		return
-	}
-
-	filteredSubs := []Subsidiary{}
-	for _, sub := range parent.Sub {
-		if sub.OwnedPercentage > minOwnership {
-			filterSubsidiaries(&sub, minOwnership, maxDepth, currentDepth+1)
-			filteredSubs = append(filteredSubs, sub)
-		}
-	}
-	parent.Sub = filteredSubs
+	return &Result, nil
 }
 
 func retrieveCompanyInfo(query string) (string, error) {

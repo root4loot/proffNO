@@ -9,29 +9,24 @@ import (
 )
 
 func main() {
-	// fetch subsidiaries of a company and its sub-subsidiaries owned by more than 50%
-	corpData, err := proffno.FetchSubsidiaries("DnB Bank ASA", 2, 50)
+	results, err := proffno.GetSubsidiaries("DnB Bank ASA")
 	if err != nil {
-		log.Fatalf("Failed to fetch subsidiaries: %v", err)
+		log.Fatal(err)
 	}
 
-	if corpData == nil {
+	if results == nil {
 		log.Println("No subsidiaries found")
 		return
 	}
 
-	printSubsidiaries(corpData.Tree, 0)
+	processSubsidiaries(results.Tree)
 }
 
-// print subsidiaries recursively
-func printSubsidiaries(sub proffno.Subsidiary, level int) {
-	if level == 0 {
-		fmt.Printf("%s%s\n", strings.Repeat("  ", level), sub.Name) // Root: No percentage
-	} else {
-		fmt.Printf("%s%s (%.2f%%)\n", strings.Repeat("  ", level), sub.Name, sub.OwnedPercentage)
-	}
+func processSubsidiaries(sub proffno.Subsidiary) {
+	indent := strings.Repeat("  ", sub.Depth)
+	fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
 
 	for _, child := range sub.Sub {
-		printSubsidiaries(child, level+1)
+		processSubsidiaries(child)
 	}
 }
