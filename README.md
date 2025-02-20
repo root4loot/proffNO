@@ -28,17 +28,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-  
-	processSubsidiaries(results.Tree)
-}
 
-func processSubsidiaries(sub proffno.Subsidiary) {
-	indent := strings.Repeat("  ", sub.Depth)
-	fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
-
-	for _, child := range sub.Sub {
-		processSubsidiaries(child)
+	if results == nil {
+		log.Println("No subsidiaries found")
+		return
 	}
+
+	var processSubsidiaries func(sub proffno.Subsidiary)
+
+	processSubsidiaries = func(sub proffno.Subsidiary) {
+		indent := strings.Repeat("  ", sub.Depth)
+		fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
+
+		for _, child := range sub.Sub {
+			processSubsidiaries(child)
+		}
+	}
+
+	processSubsidiaries(results.Tree)
 }
 ```
 

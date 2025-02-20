@@ -19,14 +19,16 @@ func main() {
 		return
 	}
 
-	processSubsidiaries(results.Tree)
-}
+	var processSubsidiaries func(sub proffno.Subsidiary)
 
-func processSubsidiaries(sub proffno.Subsidiary) {
-	indent := strings.Repeat("  ", sub.Depth)
-	fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
+	processSubsidiaries = func(sub proffno.Subsidiary) {
+		indent := strings.Repeat("  ", sub.Depth)
+		fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
 
-	for _, child := range sub.Sub {
-		processSubsidiaries(child)
+		for _, child := range sub.Sub {
+			processSubsidiaries(child)
+		}
 	}
+
+	processSubsidiaries(results.Tree)
 }
