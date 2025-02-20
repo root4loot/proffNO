@@ -29,16 +29,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if results == nil {
-		log.Println("No subsidiaries found")
-		return
-	}
-
 	var processSubsidiaries func(sub proffno.Subsidiary)
-
 	processSubsidiaries = func(sub proffno.Subsidiary) {
 		indent := strings.Repeat("  ", sub.Depth)
-		fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth+1, sub.Name, sub.OwnedPercentage)
+		fmt.Printf("%s%d. %s (%.2f%%)\n", indent, sub.Depth, sub.Name, sub.OwnedPercentage)
 
 		for _, child := range sub.Sub {
 			processSubsidiaries(child)

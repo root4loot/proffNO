@@ -21,12 +21,10 @@ type Result struct {
 	Tree          Subsidiary `json:"tree"`
 }
 
-// OwnershipPercentage returns the ownership percentage of the subsidiary
 func (s *Subsidiary) OwnershipPercentage() float64 {
 	return s.OwnedPercentage
 }
 
-// SubsidiaryName returns the name of the subsidiary
 func (s *Subsidiary) SubsidiaryName() string {
 	return s.Name
 }
@@ -45,10 +43,34 @@ func GetSubsidiaries(orgName string) (*Result, error) {
 
 	result.InputQuery = orgName
 
-	// Assign depth levels starting from 0 (root)
-	assignDepth(&result.Tree, 0)
-
+	assignDepth(&result.Tree, 1) // root node is at depth 1
 	return &Result{TargetCompany: orgName, Tree: result.Tree}, nil
+}
+
+// GetOwnedSubsidiaries returns a list of all companies that are owned (>50%) by the target company up to a specified depth
+func (r *Result) GetOwnedSubsidiaries(maxDepth int) []string {
+	var ownedSubsidiaries []string
+
+	var collectOwned func(sub Subsidiary, parentOwned bool)
+	collectOwned = func(sub Subsidiary, parentOwned bool) {
+		if sub.Depth > maxDepth {
+			return
+		}
+
+		isOwned := parentOwned || sub.OwnedPercentage > 50.0
+
+		if isOwned {
+			ownedSubsidiaries = append(ownedSubsidiaries, sub.Name)
+		}
+
+		for _, child := range sub.Sub {
+			collectOwned(child, isOwned)
+		}
+	}
+
+	collectOwned(r.Tree, false)
+
+	return ownedSubsidiaries
 }
 
 func assignDepth(sub *Subsidiary, depth int) {
