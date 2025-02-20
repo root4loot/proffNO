@@ -6,76 +6,103 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"unicode"
 )
 
-type Result struct {
-	Name            string  `json:"name"`
-	OwnedPercentage float64 `json:"ownedPercentage"`
+type Subsidiary struct {
+	Name            string       `json:"name"`
+	OwnedPercentage float64      `json:"ownedPercentage"`
+	Sub             []Subsidiary `json:"sub"`
 }
 
-type Results struct {
-	Results []Result `json:"results"`
+type CorporateData struct {
+	Tree Subsidiary `json:"tree"`
 }
 
-func findOrgInfo(query string, queryIsOrgName bool) (orgInfo string, err error) {
+func FetchSubsidiaries(orgName string, depth int, minOwnership float64) (*CorporateData, error) {
+	if depth <= 0 {
+		return nil, nil
+	}
+
+	orgName = formatCompanyName(orgName)
+	orgNumber, err := retrieveCompanyInfo(orgName)
+	if err != nil {
+		return nil, err
+	}
+
+	corpData, err := retrieveCorporateStructure(orgNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	filterSubsidiaries(&corpData.Tree, minOwnership)
+	return corpData, nil
+}
+
+func retrieveCorporateStructure(orgNumber string) (*CorporateData, error) {
+	resp, err := http.Get("https://proff.no/api/company/legal/" + orgNumber + "/corporateStructure")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var corpData CorporateData
+	if err := json.NewDecoder(resp.Body).Decode(&corpData); err != nil {
+		return nil, err
+	}
+
+	return &corpData, nil
+}
+
+func filterSubsidiaries(parent *Subsidiary, minOwnership float64) {
+	filteredSubs := []Subsidiary{}
+	for _, sub := range parent.Sub {
+		if sub.OwnedPercentage > minOwnership {
+			filterSubsidiaries(&sub, minOwnership)
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	parent.Sub = filteredSubs
+}
+
+func retrieveCompanyInfo(query string) (string, error) {
 	query = strings.ReplaceAll(query, " ", "+")
-
-	buildID, err := getBuildID()
+	buildID, err := fetchBuildID()
 	if err != nil {
 		return "", err
 	}
 
-	response, err := http.Get("https://proff.no/_next/data/" + buildID + "/search.json?q=" + query)
+	resp, err := http.Get("https://proff.no/_next/data/" + buildID + "/search.json?q=" + query)
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
-	var structure SearchStructure
-	decoder := json.NewDecoder(response.Body)
-	if err := decoder.Decode(&structure); err != nil {
+	var searchResponse struct {
+		PageProps struct {
+			HydrationData struct {
+				SearchStore struct {
+					Companies struct {
+						Companies []struct {
+							Orgnr string `json:"orgnr"`
+						} `json:"companies"`
+					} `json:"companies"`
+				} `json:"searchStore"`
+			} `json:"hydrationData"`
+		} `json:"pageProps"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&searchResponse); err != nil {
 		return "", err
 	}
 
-	if len(structure.PageProps.HydrationData.SearchStore.Companies.Companies) > 0 {
-		if queryIsOrgName {
-			orgInfo = structure.PageProps.HydrationData.SearchStore.Companies.Companies[0].Orgnr
-		} else {
-			orgInfo = structure.PageProps.HydrationData.SearchStore.Companies.Companies[0].Name
-		}
+	if len(searchResponse.PageProps.HydrationData.SearchStore.Companies.Companies) == 0 {
+		return "", nil
 	}
 
-	return orgInfo, nil
+	return searchResponse.PageProps.HydrationData.SearchStore.Companies.Companies[0].Orgnr, nil
 }
 
-func GetSubsidiaries(orgName string, level int, greaterThanPercentage float64) (results []Result, err error) {
-	if level <= 0 {
-		return results, nil
-	}
-
-	orgName = normalizeOrganizationName(orgName)
-	subs, _ := collectSubsidiaries(orgName)
-
-	for _, sub := range subs {
-		if sub.OwnedPercentage > greaterThanPercentage {
-			result := Result{
-				Name:            sub.Name,
-				OwnedPercentage: sub.OwnedPercentage,
-			}
-			results = append(results, result)
-			subSubs, err := GetSubsidiaries(sub.Name, level-1, greaterThanPercentage)
-			if err != nil {
-				return nil, err
-			}
-			results = append(results, subSubs...)
-		}
-	}
-
-	return results, nil
-}
-
-func getBuildID() (string, error) {
+func fetchBuildID() (string, error) {
 	resp, err := http.Get("https://proff.no/")
 	if err != nil {
 		return "", err
@@ -86,115 +113,22 @@ func getBuildID() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	re := regexp.MustCompile(`"buildId":"(.*?)"`)
 	matches := re.FindStringSubmatch(string(body))
-
 	if len(matches) < 2 {
-		return "", nil 
+		return "", nil
 	}
-
 	return matches[1], nil
 }
 
-func collectSubsidiaries(query string) (results []Result, err error) {
-	var structure CorporateStructure
-	var orgNR, orgName string
-
-	if isNumeric(query) {
-		orgNR = query
-		orgName, err = findOrgInfo(query, true)
-	} else {
-		orgName = query
-		orgNR, err = findOrgInfo(query, true)
-	}
-
-	response, err := http.Get("https://proff.no/api/company/legal/" + orgNR + "/corporateStructure")
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	decoder := json.NewDecoder(response.Body)
-	if err := decoder.Decode(&structure); err != nil {
-		return nil, err
-	}
-
-	if structure.Tree.Name == orgName {
-		for _, level1 := range structure.Tree.Sub {
-			results = append(results, Result{Name: level1.Name, OwnedPercentage: level1.OwnedPercentage})
-		}
-	} else {
-		for _, level1 := range structure.Tree.Sub {
-			if level1.Name == orgName {
-				for _, level2 := range level1.Sub {
-					results = append(results, Result{Name: level2.Name, OwnedPercentage: level2.OwnedPercentage})
-				}
-			}
-		}
-
-		for _, level1 := range structure.Tree.Sub {
-			for _, level2 := range level1.Sub {
-				if level2.Name == orgName {
-					for _, level3 := range level2.Sub {
-						results = append(results, Result{Name: level3.Name, OwnedPercentage: level3.OwnedPercentage})
-					}
-				}
-			}
-		}
-
-		for _, level1 := range structure.Tree.Sub {
-			for _, level2 := range level1.Sub {
-				for _, level3 := range level2.Sub {
-					if level3.Name == orgName {
-						for _, level4 := range level3.Sub {
-							if sub4Map, ok := level4.(map[string]interface{}); ok {
-								var name string
-								var ownedPercentage float64
-								for key, value := range sub4Map {
-									switch key {
-									case "name":
-										name, _ = value.(string)
-									case "ownedPercentage":
-										ownedPercentage, _ = value.(float64)
-
-									}
-								}
-								results = append(results, Result{Name: name, OwnedPercentage: ownedPercentage})
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return
-}
-
-func normalizeOrganizationName(name string) string {
+func formatCompanyName(name string) string {
 	words := strings.Fields(name)
-
 	for i, word := range words {
-		for _, v := range word {
-			u := string(unicode.ToUpper(v))
-			word = u + word[len(u):]
-			break
-		}
-
+		words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
 		if (strings.ToLower(word) == "as" || strings.ToLower(word) == "asa") && i == len(words)-1 {
-			word = strings.ToUpper(word)
+			words[i] = strings.ToUpper(word)
 		}
-
-		words[i] = word
 	}
-
 	return strings.Join(words, " ")
-}
-
-func isNumeric(s string) bool {
-	for _, char := range s {
-		if !unicode.IsDigit(char) {
-			return false
-		}
-	}
-	return true
 }
