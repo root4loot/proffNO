@@ -14,11 +14,12 @@ type Subsidiary struct {
 	Sub             []Subsidiary `json:"sub"`
 }
 
-type CorporateData struct {
-	Tree Subsidiary `json:"tree"`
+type Results struct {
+	TargetCompany string     `json:"targetCompany"`
+	Tree          Subsidiary `json:"tree"`
 }
 
-func FetchSubsidiaries(orgName string, depth int, minOwnership float64) (*CorporateData, error) {
+func FetchSubsidiaries(orgName string, depth int, minOwnership float64) (*Results, error) {
 	if depth <= 0 {
 		return nil, nil
 	}
@@ -29,35 +30,40 @@ func FetchSubsidiaries(orgName string, depth int, minOwnership float64) (*Corpor
 		return nil, err
 	}
 
-	corpData, err := retrieveCorporateStructure(orgNumber)
+	resultData, err := retrieveCorporateStructure(orgNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	filterSubsidiaries(&corpData.Tree, minOwnership)
-	return corpData, nil
+	filterSubsidiaries(&resultData.Tree, minOwnership, depth, 1)
+
+	return &Results{TargetCompany: orgName, Tree: resultData.Tree}, nil
 }
 
-func retrieveCorporateStructure(orgNumber string) (*CorporateData, error) {
+func retrieveCorporateStructure(orgNumber string) (*Results, error) {
 	resp, err := http.Get("https://proff.no/api/company/legal/" + orgNumber + "/corporateStructure")
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var corpData CorporateData
-	if err := json.NewDecoder(resp.Body).Decode(&corpData); err != nil {
+	var resultData Results
+	if err := json.NewDecoder(resp.Body).Decode(&resultData); err != nil {
 		return nil, err
 	}
 
-	return &corpData, nil
+	return &resultData, nil
 }
 
-func filterSubsidiaries(parent *Subsidiary, minOwnership float64) {
+func filterSubsidiaries(parent *Subsidiary, minOwnership float64, maxDepth, currentDepth int) {
+	if currentDepth >= maxDepth {
+		return
+	}
+
 	filteredSubs := []Subsidiary{}
 	for _, sub := range parent.Sub {
 		if sub.OwnedPercentage > minOwnership {
-			filterSubsidiaries(&sub, minOwnership)
+			filterSubsidiaries(&sub, minOwnership, maxDepth, currentDepth+1)
 			filteredSubs = append(filteredSubs, sub)
 		}
 	}

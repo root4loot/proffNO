@@ -14,8 +14,8 @@ go get github.com/root4loot/proffno
 
 ```go
 func main() {
-	// Fetch subsidiaries of a company and its sub-subsidiaries owned by more than 50%
-	corpData, err := proffno.FetchSubsidiaries("DnB Bank ASA", 2, 50)
+	// fetch subsidiaries of a company and its sub-subsidiaries owned by more than 50%
+	corpData, err := proffno.FetchSubsidiaries("DnB Bank ASA", 2, 50) // fetch subsubdiaries
 	if err != nil {
 		log.Fatalf("Failed to fetch subsidiaries: %v", err)
 	}
@@ -28,12 +28,17 @@ func main() {
 	printSubsidiaries(corpData.Tree, 0)
 }
 
-// Recursively print subsidiaries
+// recursively print subsidiaries
 func printSubsidiaries(sub proffno.Subsidiary, level int) {
-	fmt.Printf("%s%s (%.2f%%)\n", strings.Repeat("  ", level), sub.Name, sub.OwnedPercentage)
-	for _, child := range sub.Sub {
-		printSubsidiaries(child, level+1)
-	}
+    if level == 0 {
+        fmt.Printf("%s%s\n", strings.Repeat("  ", level), sub.Name) // Root: No percentage
+    } else {
+        fmt.Printf("%s%s (%.2f%%)\n", strings.Repeat("  ", level), sub.Name, sub.OwnedPercentage)
+    }
+
+    for _, child := range sub.Sub {
+        printSubsidiaries(child, level+1)
+    }
 }
 
 ```
@@ -41,7 +46,7 @@ func printSubsidiaries(sub proffno.Subsidiary, level int) {
 ### Output
 
 ```
-DnB Bank ASA (0.00%)
+DnB Bank ASA
   DnB Livsforsikring AS (100.00%)
     DnB Private Equity VI (is) AS (63.69%)
     DnB Private Equity IV (is) AS (58.95%)
