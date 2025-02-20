@@ -1,8 +1,8 @@
 # proffno
 
-[![Test](https://github.com/root4loot/proffno/actions/workflows/test-daily.yml/badge.svg?branch=main)](https://github.com/root4loot/proffno/actions/workflows/test-daily.yml)
+[![Build](https://github.com/root4loot/proffno/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/root4loot/proffno/actions/workflows/build.yml)
 
-A simple package used to obtain a list of subsidiaries for a Norwegian company based on ownership percentage and depth level. Parses data from [proff.no](https://proff.no)
+Get a list of subsidiaries for a Norwegian companies based on depth and ownership percentage level. Parses data from [proff.no](https://proff.no)
 
 ## Installation
 
